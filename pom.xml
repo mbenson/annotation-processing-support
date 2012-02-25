@@ -25,7 +25,7 @@
 
   <name>annotation-processing-support</name>
   <description>Supporting code for Java 6 annotation processing</description>
-  <url>http://github.com/mbenson/annotation-processing-support</url>
+  <url>https://github.com/mbenson/annotation-processing-support</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
