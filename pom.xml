@@ -18,13 +18,13 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>mbenson</groupId>
+  <groupId>com.github.mbenson</groupId>
   <artifactId>annotation-processing-support</artifactId>
   <version>1.0-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>annotation-processing-support</name>
-  <description>Supporting code for Java 6 annotation processing</description>
+  <description>Supporting code for Java 6+ annotation processing</description>
   <url>https://github.com/mbenson/annotation-processing-support</url>
 
   <properties>
