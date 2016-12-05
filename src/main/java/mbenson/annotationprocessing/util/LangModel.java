@@ -15,32 +15,49 @@
  */
 package mbenson.annotationprocessing.util;
 
-import java.util.ArrayList;
+import static java.lang.reflect.Modifier.ABSTRACT;
+import static java.lang.reflect.Modifier.FINAL;
+import static java.lang.reflect.Modifier.NATIVE;
+import static java.lang.reflect.Modifier.PRIVATE;
+import static java.lang.reflect.Modifier.PROTECTED;
+import static java.lang.reflect.Modifier.PUBLIC;
+import static java.lang.reflect.Modifier.STATIC;
+import static java.lang.reflect.Modifier.STRICT;
+import static java.lang.reflect.Modifier.SYNCHRONIZED;
+import static java.lang.reflect.Modifier.TRANSIENT;
+import static java.lang.reflect.Modifier.VOLATILE;
+
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.lang.model.element.Element;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.type.TypeMirror;
 
-import org.apache.commons.lang3.reflect.FieldUtils;
-
 import com.sun.codemodel.JClass;
 import com.sun.codemodel.JCodeModel;
 import com.sun.codemodel.JGenerifiable;
-import com.sun.codemodel.JMod;
+import com.sun.codemodel.JTypeVar;
 
 /**
  * Hosts utility methods for working with {@code javax.lang.model}.
  */
 public class LangModel {
+
     /**
      * Utility methods for working with {@link JCodeModel}.
      */
     public static class ToCodeModel {
+
         private final JCodeModel codeModel;
 
         private ToCodeModel(JCodeModel codeModel) {
@@ -48,43 +65,40 @@ public class LangModel {
         }
 
         /**
-         * Translate {@link Modifier}s to a {@link JMod} {@code int}.
-         * 
-         * @param mods
-         * @return int
-         */
-        public int translateModifiers(Iterable<Modifier> mods) {
-            int result = 0;
-            for (Modifier mod : mods) {
-                try {
-                    result |= ((Integer) FieldUtils.readDeclaredStaticField(JMod.class, mod.name())).intValue();
-                } catch (IllegalAccessException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-            return result;
-        }
-
-        /**
-         * Copy a set of {@link TypeParameterElement}s to a set of target
-         * {@link JGenerifiable}s.
+         * Copy a set of {@link TypeParameterElement}s to a set of target {@link JGenerifiable}s.
          * 
          * @param typeParameters
          * @param targets
          */
         public void copyTo(Iterable<? extends TypeParameterElement> typeParameters, JGenerifiable... targets) {
             for (TypeParameterElement t : typeParameters) {
-                List<? extends TypeMirror> bounds = t.getBounds();
-                JClass bound = (JClass) CodeModel.naiveType(codeModel, bounds.get(0).toString());
+                final List<? extends TypeMirror> bounds = t.getBounds();
+                final JClass bound = (JClass) CodeModel.naiveType(codeModel, bounds.get(0).toString());
                 for (JGenerifiable target : targets) {
-                    if (bounds.isEmpty()) {
-                        target.generify(t.getSimpleName().toString());
-                    } else {
-                        target.generify(t.getSimpleName().toString(), bound);
+                    final JTypeVar typeVar = target.generify(t.getSimpleName().toString());
+                    if (!Object.class.getName().equals(bound.binaryName())) {
+                        typeVar.bound(bound);
                     }
                 }
             }
         }
+    }
+
+    private static final Map<Modifier, Integer> MODIFIER_CONSTANTS;
+    static {
+        final Map<Modifier, Integer> m = new EnumMap<>(Modifier.class);
+        m.put(Modifier.PUBLIC, PUBLIC);
+        m.put(Modifier.PRIVATE, PRIVATE);
+        m.put(Modifier.PROTECTED, PROTECTED);
+        m.put(Modifier.STATIC, STATIC);
+        m.put(Modifier.FINAL, FINAL);
+        m.put(Modifier.SYNCHRONIZED, SYNCHRONIZED);
+        m.put(Modifier.VOLATILE, VOLATILE);
+        m.put(Modifier.TRANSIENT, TRANSIENT);
+        m.put(Modifier.NATIVE, NATIVE);
+        m.put(Modifier.ABSTRACT, ABSTRACT);
+        m.put(Modifier.STRICTFP, STRICT);
+        MODIFIER_CONSTANTS = Collections.unmodifiableMap(m);
     }
 
     /**
@@ -98,29 +112,80 @@ public class LangModel {
     }
 
     /**
-     * Filter {@link Element}s that match a set of modifiers.
+     * Filter {@link Element}s that match a set of modifiers. Returns elements with all specified modifiers.
      * 
      * @param elements
-     * @param modifiers
+     * @param modifiers to match
      * @return Iterable<T>
      */
     public static <T extends Element> Iterable<T> filterByModifier(Iterable<T> elements, Modifier... modifiers) {
-        final Set<Modifier> modifierSet;
-        if (modifiers != null && modifiers.length > 0) {
-            modifierSet = new HashSet<Modifier>();
-        } else {
-            modifierSet = Collections.emptySet();
-        }
-
-        Collections.addAll(modifierSet, modifiers);
-
-        ArrayList<T> result = new ArrayList<T>();
-        for (T element : elements) {
-            if (element.getModifiers().containsAll(modifierSet)) {
-                result.add(element);
-            }
-        }
-        return result;
+        return filterByModifiers(elements, ModifierMatch.ALL, modifiers);
     }
 
+    /**
+     * Filter {@link Element}s that exactly match a set of modifiers. Returns elements with only the specified
+     * modifiers.
+     * 
+     * @param elements
+     * @param modifiers to match
+     * @return Iterable<T>
+     */
+    public static <T extends Element> Iterable<T> filterByExactModifiers(Iterable<T> elements, Modifier... modifiers) {
+        return filterByModifiers(elements, ModifierMatch.EXACT, modifiers);
+    }
+
+    private enum ModifierMatch {
+                                ALL {
+                                    @Override
+                                    protected Predicate<Element> filter(Set<Modifier> modifiers) {
+                                        return e -> e.getModifiers().containsAll(modifiers);
+                                    }
+                                },
+                                EXACT {
+                                    @Override
+                                    protected Predicate<Element> filter(Set<Modifier> modifiers) {
+                                        return e -> e.getModifiers().equals(modifiers);
+                                    }
+                                };
+
+        protected abstract Predicate<Element> filter(Set<Modifier> modifiers);
+    }
+
+    private static <T extends Element> Iterable<T> filterByModifiers(Iterable<T> elements, ModifierMatch behavior,
+        Modifier... modifiers) {
+        final Set<Modifier> modifierSet =
+            modifiers == null ? Collections.emptySet() : Stream.of(modifiers).collect(Collectors.toSet());
+
+        final Stream.Builder<T> bld = Stream.builder();
+        elements.iterator().forEachRemaining(bld);
+        return bld.build().filter(behavior.filter(modifierSet)).collect(Collectors.toList());
+    }
+
+    /**
+     * Encode the specified set of {@link Modifier}s to an {@code int}.
+     * 
+     * @param modifiers
+     * @return OR'ed int
+     */
+    public static int encodeModifiers(Modifier... modifiers) {
+        return encodeModifiers(Arrays.asList(modifiers));
+    }
+
+    /**
+     * Encode the specified set of {@link Modifier}s to an {@code int}.
+     * 
+     * @param modifiers
+     * @return OR'ed int
+     */
+    public static int encodeModifiers(Iterable<Modifier> modifiers) {
+        Stream<Modifier> stream;
+        if (modifiers instanceof Collection<?>) {
+            stream = ((Collection<Modifier>) modifiers).stream();
+        } else {
+            final Stream.Builder<Modifier> bld = Stream.builder();
+            modifiers.iterator().forEachRemaining(bld);
+            stream = bld.build();
+        }
+        return stream.mapToInt(MODIFIER_CONSTANTS::get).reduce(0, (l, r) -> l | r);
+    }
 }

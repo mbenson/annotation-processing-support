@@ -17,18 +17,25 @@ package mbenson.annotationprocessing;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.annotation.Annotation;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
+import javax.lang.model.type.MirroredTypeException;
+import javax.lang.model.type.MirroredTypesException;
+import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.Diagnostic.Kind;
-
-import org.apache.commons.lang3.ObjectUtils;
-import org.apache.commons.lang3.Validate;
 
 /**
  * Abstract base class to provide further functionality atop {@link AbstractProcessor}.
@@ -39,15 +46,10 @@ public abstract class ProcessorBase extends AbstractProcessor {
         void write(Diagnostic.Kind kind, String message, Object... arguments);
     }
 
-    private static ThreadLocal<MessageWriter> MESSAGE_WRITER = new ThreadLocal<MessageWriter>();
+    private static ThreadLocal<MessageWriter> MESSAGE_WRITER = new ThreadLocal<>();
 
-    private MessageWriter defaultMessageWriter = new MessageWriter() {
-
-        @Override
-        public void write(Kind kind, String message, Object... arguments) {
-            processingEnv.getMessager().printMessage(kind, String.format(message, arguments));
-        }
-    };
+    private MessageWriter defaultMessageWriter =
+        (kind, message, arguments) -> processingEnv.getMessager().printMessage(kind, String.format(message, arguments));
 
     /**
      * Internal process of a single element. Handles message printing based on constructor args.
@@ -67,16 +69,11 @@ public abstract class ProcessorBase extends AbstractProcessor {
          */
         protected Process(final T element) {
             super();
-            this.element = Validate.notNull(element);
+            this.element = Objects.requireNonNull(element, "element");
             this.annotation = null;
             this.value = null;
-            this.messageWriter = new MessageWriter() {
-
-                @Override
-                public void write(Kind kind, String message, Object... arguments) {
-                    processingEnv.getMessager().printMessage(kind, String.format(message, arguments), element);
-                }
-            };
+            this.messageWriter = (kind, message, arguments) -> processingEnv.getMessager().printMessage(kind,
+                String.format(message, arguments), element);
         }
 
         /**
@@ -87,17 +84,11 @@ public abstract class ProcessorBase extends AbstractProcessor {
          */
         protected Process(final T element, final AnnotationMirror annotation) {
             super();
-            this.element = Validate.notNull(element);
-            this.annotation = Validate.notNull(annotation);
+            this.element = Objects.requireNonNull(element, "element");
+            this.annotation = Objects.requireNonNull(annotation, "annotation");
             this.value = null;
-            this.messageWriter = new MessageWriter() {
-
-                @Override
-                public void write(Kind kind, String message, Object... arguments) {
-                    processingEnv.getMessager().printMessage(kind, String.format(message, arguments), element,
-                        annotation);
-                }
-            };
+            this.messageWriter = (kind, message, arguments) -> processingEnv.getMessager().printMessage(kind,
+                String.format(message, arguments), element, annotation);
         }
 
         /**
@@ -109,24 +100,18 @@ public abstract class ProcessorBase extends AbstractProcessor {
          */
         protected Process(final T element, final AnnotationMirror annotation, final AnnotationValue value) {
             super();
-            this.element = Validate.notNull(element);
-            this.annotation = Validate.notNull(annotation);
-            this.value = Validate.notNull(value);
-            this.messageWriter = new MessageWriter() {
-
-                @Override
-                public void write(Kind kind, String message, Object... arguments) {
-                    processingEnv.getMessager().printMessage(kind, String.format(message, arguments), element,
-                        annotation, value);
-                }
-            };
+            this.element = Objects.requireNonNull(element, "element");
+            this.annotation = Objects.requireNonNull(annotation, "annotation");
+            this.value = Objects.requireNonNull(value, "value");
+            this.messageWriter = (kind, message, arguments) -> processingEnv.getMessager().printMessage(kind,
+                String.format(message, arguments), element, annotation, value);
         }
 
         /**
          * Process.
          */
         public final void process() {
-            MessageWriter orig = MESSAGE_WRITER.get();
+            final MessageWriter orig = MESSAGE_WRITER.get();
             MESSAGE_WRITER.set(messageWriter);
             try {
                 processImpl();
@@ -183,8 +168,8 @@ public abstract class ProcessorBase extends AbstractProcessor {
      * @param args
      */
     protected void error(Throwable cause, String message, Object... args) {
-        StringWriter msg = new StringWriter();
-        PrintWriter w = new PrintWriter(msg);
+        final StringWriter msg = new StringWriter();
+        final PrintWriter w = new PrintWriter(msg);
         w.format(message, args);
         w.println();
         if (cause != null) {
@@ -201,6 +186,75 @@ public abstract class ProcessorBase extends AbstractProcessor {
      * @param arguments
      */
     protected void printMessage(Kind kind, String message, Object... arguments) {
-        ObjectUtils.defaultIfNull(MESSAGE_WRITER.get(), defaultMessageWriter).write(kind, message, arguments);
+        Optional.ofNullable(MESSAGE_WRITER.get()).orElse(defaultMessageWriter).write(kind, message, arguments);
+    }
+
+    /**
+     * Handle {@link MirroredTypeException} reading a class-valued annotation attribute from a language {@link Element}.
+     * 
+     * @param a
+     * @param classAttribute
+     * @return TypeMirror
+     */
+    protected <A extends Annotation> TypeMirror getTypeMirror(A a, Function<A, Class<?>> classAttribute) {
+        try {
+            return Optional.of(classAttribute.apply(a)).map(this::mirror).get();
+        } catch (MirroredTypeException e) {
+            return e.getTypeMirror();
+        }
+    }
+
+    /**
+     * Handle {@link MirroredTypesException} reading a class array-valued annotation attribute from a language
+     * {@link Element}.
+     * 
+     * @param a
+     * @param classArrayAttribute
+     * @return {@link List} of {@link TypeMirror}
+     */
+    protected <A extends Annotation> List<? extends TypeMirror> getTypeMirrors(A a,
+        Function<A, Class<?>[]> classArrayAttribute) {
+        try {
+            return Stream.of(classArrayAttribute.apply(a)).map(this::mirror).collect(Collectors.toList());
+        } catch (MirroredTypesException e) {
+            return e.getTypeMirrors();
+        }
+    }
+
+    /**
+     * Handle {@link MirroredTypeException} reading a class-valued annotation attribute from a language {@link Element}.
+     * 
+     * @param a
+     * @param classAttribute
+     * @return String
+     */
+    protected <A extends Annotation> String getClassName(A a, Function<A, Class<?>> classAttribute) {
+        try {
+            return classAttribute.apply(a).getName();
+        } catch (MirroredTypeException e) {
+            return e.getTypeMirror().toString();
+        }
+    }
+
+    /**
+     * Handle {@link MirroredTypesException} reading a class array-valued annotation attribute from a language
+     * {@link Element}.
+     * 
+     * @param a
+     * @param classArrayAttribute
+     * @return {@link List} of {@link String}
+     */
+    protected <A extends Annotation> List<String> getClassNames(A a, Function<A, Class<?>[]> classAttribute) {
+        Stream<String> stream;
+        try {
+            stream = Stream.of(classAttribute.apply(a)).map(Class::getName);
+        } catch (MirroredTypesException e) {
+            stream = Stream.of(e.getTypeMirrors()).map(Object::toString);
+        }
+        return stream.collect(Collectors.toList());
+    }
+
+    private TypeMirror mirror(Class<?> cls) {
+        return types().getDeclaredType(elements().getTypeElement(cls.getName()));
     }
 }

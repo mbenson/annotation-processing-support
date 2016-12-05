@@ -15,7 +15,8 @@
  */
 package mbenson.annotationprocessing.util;
 
-import org.apache.commons.lang3.SystemUtils;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.sun.codemodel.JBlock;
 import com.sun.codemodel.JCodeModel;
@@ -48,15 +49,15 @@ public class CodeModel {
      */
     // TODO provide a more direct way to create a type variable JType
     public static <T extends JType> T naiveType(JCodeModel codeModel, String name) {
-        T result;
         try {
-            @SuppressWarnings({ "unchecked", "unused" })
-            T knownType = result = (T) codeModel.parseType(name);
+            @SuppressWarnings({ "unchecked" })
+            final T knownType = (T) codeModel.parseType(name);
+            return knownType;
         } catch (ClassNotFoundException e) {
-            @SuppressWarnings({ "unused", "unchecked" })
-            T naiveType = result = (T) codeModel.directClass(name);
+            @SuppressWarnings({ "unchecked" })
+            final T naiveType = (T) codeModel.directClass(name);
+            return naiveType;
         }
-        return result;
     }
 
     /**
@@ -67,10 +68,7 @@ public class CodeModel {
      */
     public static void addTo(JCommentPart commentPart, String... commentary) {
         if (commentary != null) {
-            for (String s : commentary) {
-                commentPart.add(s);
-                commentPart.add(SystemUtils.LINE_SEPARATOR);
-            }
+            commentPart.add(Stream.of(commentary).collect(Collectors.joining("\n")));
         }
     }
 }
