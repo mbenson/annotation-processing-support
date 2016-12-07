@@ -31,7 +31,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
-import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -41,12 +41,11 @@ import java.util.stream.Stream;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeParameterElement;
-import javax.lang.model.type.TypeMirror;
 
-import com.sun.codemodel.JClass;
-import com.sun.codemodel.JCodeModel;
-import com.sun.codemodel.JGenerifiable;
-import com.sun.codemodel.JTypeVar;
+import com.helger.jcodemodel.AbstractJClass;
+import com.helger.jcodemodel.IJGenerifiable;
+import com.helger.jcodemodel.JCodeModel;
+import com.helger.jcodemodel.JTypeVar;
 
 /**
  * Hosts utility methods for working with {@code javax.lang.model}.
@@ -70,18 +69,22 @@ public class LangModel {
          * @param typeParameters
          * @param targets
          */
-        public void copyTo(Iterable<? extends TypeParameterElement> typeParameters, JGenerifiable... targets) {
+        public void copyTo(Iterable<? extends TypeParameterElement> typeParameters, IJGenerifiable... targets) {
             for (TypeParameterElement t : typeParameters) {
-                final List<? extends TypeMirror> bounds = t.getBounds();
-                final JClass bound = (JClass) CodeModel.naiveType(codeModel, bounds.get(0).toString());
-                for (JGenerifiable target : targets) {
+
+                final Set<AbstractJClass> bounds =
+                    t.getBounds().stream().allMatch(b -> Object.class.getName().equals(b.toString()))
+                        ? Collections.emptySet()
+                        : t.getBounds().stream().<AbstractJClass> map(b -> CodeModel.naiveType(codeModel, b.toString()))
+                            .collect(Collectors.toCollection(LinkedHashSet::new));
+
+                for (IJGenerifiable target : targets) {
                     final JTypeVar typeVar = target.generify(t.getSimpleName().toString());
-                    if (!Object.class.getName().equals(bound.binaryName())) {
-                        typeVar.bound(bound);
-                    }
+                    bounds.forEach(typeVar::bound);
                 }
             }
         }
+
     }
 
     private static final Map<Modifier, Integer> MODIFIER_CONSTANTS;

@@ -17,6 +17,7 @@ package mbenson.annotationprocessing;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.Charset;
 import java.util.Set;
 
 import javax.annotation.processing.RoundEnvironment;
@@ -28,11 +29,11 @@ import javax.tools.JavaFileObject;
 
 import org.apache.commons.lang3.StringUtils;
 
-import com.sun.codemodel.CodeWriter;
-import com.sun.codemodel.JCodeModel;
-import com.sun.codemodel.JPackage;
-import com.sun.codemodel.JType;
-import com.sun.codemodel.writer.PrologCodeWriter;
+import com.helger.jcodemodel.AbstractCodeWriter;
+import com.helger.jcodemodel.AbstractJType;
+import com.helger.jcodemodel.JCodeModel;
+import com.helger.jcodemodel.JPackage;
+import com.helger.jcodemodel.writer.PrologCodeWriter;
 
 import mbenson.annotationprocessing.util.CodeModel;
 
@@ -64,7 +65,7 @@ public abstract class CodeModelProcessorBase extends ProcessorBase {
             this.codeModel = codeModel;
         }
 
-        protected <TYPE extends JType> TYPE naiveType(String name) {
+        protected <TYPE extends AbstractJType> TYPE naiveType(String name) {
             return CodeModel.naiveType(codeModel, name);
         }
     }
@@ -81,7 +82,7 @@ public abstract class CodeModelProcessorBase extends ProcessorBase {
         }
         if (result) {
             try {
-                final CodeWriter codeWriter = new CodeWriter() {
+                final AbstractCodeWriter codeWriter = new AbstractCodeWriter(Charset.forName("UTF-8"), System.getProperty("line.separator")) {
 
                     @Override
                     public OutputStream openBinary(JPackage pkg, String fileName) throws IOException {

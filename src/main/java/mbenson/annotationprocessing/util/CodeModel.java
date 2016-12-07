@@ -15,13 +15,9 @@
  */
 package mbenson.annotationprocessing.util;
 
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import com.sun.codemodel.JBlock;
-import com.sun.codemodel.JCodeModel;
-import com.sun.codemodel.JCommentPart;
-import com.sun.codemodel.JType;
+import com.helger.jcodemodel.AbstractJType;
+import com.helger.jcodemodel.JBlock;
+import com.helger.jcodemodel.JCodeModel;
 
 /**
  * Hosts utility methods for working with {@link JCodeModel}.
@@ -48,27 +44,16 @@ public class CodeModel {
      * @return JType named
      */
     // TODO provide a more direct way to create a type variable JType
-    public static <T extends JType> T naiveType(JCodeModel codeModel, String name) {
+    public static <T extends AbstractJType> T naiveType(JCodeModel codeModel, String name) {
         try {
             @SuppressWarnings({ "unchecked" })
             final T knownType = (T) codeModel.parseType(name);
             return knownType;
-        } catch (ClassNotFoundException e) {
+        } catch (UnsupportedOperationException e) {
             @SuppressWarnings({ "unchecked" })
             final T naiveType = (T) codeModel.directClass(name);
             return naiveType;
         }
     }
 
-    /**
-     * Add (potentially multiline) {@code commentary} to {@code commentPart}.
-     * 
-     * @param commentPart
-     * @param commentary
-     */
-    public static void addTo(JCommentPart commentPart, String... commentary) {
-        if (commentary != null) {
-            commentPart.add(Stream.of(commentary).collect(Collectors.joining("\n")));
-        }
-    }
 }
